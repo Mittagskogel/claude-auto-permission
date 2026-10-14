@@ -10,6 +10,7 @@ import (
 
 	configpb "claude-auto-permission/internal/gen/config/v1"
 	"claude-auto-permission/internal/llmclassifier/providers/bedrock"
+	"claude-auto-permission/internal/llmclassifier/providers/openai"
 )
 
 // providerCfg returns the unexported cfg field of a provider via reflect+unsafe. We deliberately don't add production
@@ -200,6 +201,54 @@ func TestProviderFromConfig(t *testing.T) {
 					t.Errorf("LatencyOptimized = true, want false")
 				}
 			},
+		},
+		{
+			name: "openai with model and api_key",
+			cfg: configpb.LlmClassifierConfig_builder{
+				Openai: configpb.OpenAIProvider_builder{
+					Model:  ptr("swiss-ai/Apertus-v1.5-70B"),
+					ApiKey: ptr("test-key"),
+				}.Build(),
+				TimeoutMs: ptr(int32(5000)),
+			}.Build(),
+			wantName: "openai",
+			assertCfg: func(t *testing.T, p any) {
+				got := providerCfg[openai.Config](t, p)
+				want := openai.Config{
+					BaseURL:             "https://api.inference.cscs.ch/v1",
+					APIKey:              "test-key",
+					Model:               "swiss-ai/Apertus-v1.5-70B",
+					Timeout:             5 * time.Second,
+					MaxTokens:           8192,
+					TwoStage:            openai.TwoStageBoth,
+					Stage1MaxTokensBoth: 64,
+					Stage1MaxTokensFast: 256,
+				}
+				if !reflect.DeepEqual(got, want) {
+					t.Errorf("openai.Config = %+v, want %+v", got, want)
+				}
+			},
+		},
+		{
+			name: "openai without api_key fails when env empty",
+			cfg: configpb.LlmClassifierConfig_builder{
+				Openai: configpb.OpenAIProvider_builder{
+					Model: ptr("swiss-ai/Apertus-v1.5-70B"),
+				}.Build(),
+			}.Build(),
+			wantErr:    true,
+			wantErrSub: "CSCS_INFERENCE_API_KEY",
+		},
+		{
+			name: "openai with explicitly empty model is rejected",
+			cfg: configpb.LlmClassifierConfig_builder{
+				Openai: configpb.OpenAIProvider_builder{
+					Model:  ptr(""),
+					ApiKey: ptr("test-key"),
+				}.Build(),
+			}.Build(),
+			wantErr:    true,
+			wantErrSub: "model: must be at least 1 characters",
 		},
 	}
 

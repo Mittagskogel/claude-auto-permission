@@ -1,0 +1,51 @@
+# proto-file: proto/config/v1/config.proto
+# proto-message: config.v1.Config
+
+# Example starter config using the CSCS Inference API OpenAI-compatible endpoint.
+#
+# Set your API key in the environment:
+#   export CSCS_INFERENCE_API_KEY="..."
+#
+# Then wire the hook in ~/.claude/settings.json to pass the key through:
+#   {
+#     "hooks": {
+#       "PreToolUse": [
+#         {
+#           "matcher": "*",
+#           "hooks": [
+#             {
+#               "type": "command",
+#               "command": "CSCS_INFERENCE_API_KEY=$CSCS_INFERENCE_API_KEY claude-auto-permission"
+#             }
+#           ]
+#         }
+#       ]
+#     }
+#   }
+
+projects {
+  path_patterns: "/**"
+  static_bash_rules {
+    allow_write_patterns: "/tmp/**"
+    use_default_rules {}
+  }
+  llm_classifier {
+    enabled: true
+    mode: CLASSIFIER_MODE_BLOCK_ONLY
+    openai {
+      base_url: "https://api.inference.cscs.ch/v1"
+      # Gemma 4 31B with JSON-mode structured output gives the best speed/reliability
+      # trade-off on CSCS for the classifier prompt.
+      model: "google/gemma-4-31B-it"
+      two_stage: TWO_STAGE_MODE_OFF
+      # api_key_env defaults to "CSCS_INFERENCE_API_KEY"; uncomment to override:
+      # api_key_env: "CSCS_INFERENCE_API_KEY"
+    }
+    timeout_ms: 20000
+    log_decisions: true
+  }
+}
+
+runtime {
+  log_decisions: true
+}

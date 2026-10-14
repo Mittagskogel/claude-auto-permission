@@ -126,8 +126,9 @@ message LlmClassifierConfig {
   }
   ClassifierMode mode = 2 [(config.v1.opts) = {default: "CLASSIFIER_MODE_FULL_AUTO"}];
 
-  // Required when enabled.
-  BedrockProvider bedrock = 3 [(buf.validate.field).required = true];
+  // Exactly one provider must be configured when the classifier is enabled.
+  BedrockProvider bedrock = 3;
+  OpenAIProvider openai = 11;
 
   // Force a Skip verdict on tools that would otherwise be classified (useful for known-safe MCP tools).
   repeated string always_skip_tools = 4;
@@ -177,7 +178,7 @@ message LlmClassifierConfig {
   OnClassifierError on_classifier_error = 10 [(config.v1.opts) = {default: "ON_CLASSIFIER_ERROR_PASSTHROUGH"}];
 }
 
-// BedrockProvider configures the AWS Bedrock classifier provider — the only one supported today.
+// BedrockProvider configures the AWS Bedrock classifier provider.
 //
 // AWS auth and region resolve via the AWS SDK's default chain (env vars, ~/.aws/, IMDS). Override per-classifier by
 // prefixing the hook command in `.claude/settings.json` with `AWS_PROFILE=...` / `AWS_REGION=...`.
@@ -226,6 +227,68 @@ message BedrockProvider {
 
   // Stage-1 max_tokens budget for TWO_STAGE_MODE_FAST.
   int32 stage1_max_tokens_fast = 6 [
+    (config.v1.opts) = {default: "256"},
+    (buf.validate.field).int32.gte = 1
+  ];
+}
+
+// OpenAIProvider configures an OpenAI-compatible classifier provider (e.g. CSCS Inference API).
+//
+// Authentication resolves from an environment variable by default so API keys don't sit in config files. Override
+// per-classifier by prefixing the hook command in `.claude/settings.json` with `CSCS_INFERENCE_API_KEY=...` or by
+// setting `api_key` inline (not recommended).
+message OpenAIProvider {
+  // Base URL for the OpenAI-compatible endpoint.
+  string base_url = 1 [
+    (config.v1.opts) = {default: "https://api.inference.cscs.ch/v1"},
+    (buf.validate.field).string.min_len = 1
+  ];
+
+  // Model identifier to request, e.g. "swiss-ai/Apertus-v1.5-70B".
+  string model = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+
+  // API key sent as `Authorization: Bearer <api_key>`. If empty, the provider reads `api_key_env` instead.
+  // Prefer the environment variable to avoid storing secrets on disk.
+  string api_key = 3;
+
+  // Name of the environment variable holding the API key. Default: CSCS_INFERENCE_API_KEY.
+  string api_key_env = 4 [
+    (config.v1.opts) = {default: "CSCS_INFERENCE_API_KEY"}
+  ];
+
+  // TwoStageMode picks the classification strategy. Modes trade latency for reasoning depth, in increasing order:
+  //
+  //   - OFF: single JSON-mode call with the classifier schema.
+  //   - FAST: stage 1 XML only — lower latency, higher false-positive rate.
+  //   - BOTH (default): stage 1 verdict; if "block", escalate to a stage 2 chain-of-thought call for the authoritative
+  //     reason. Matches Claude Code's production default.
+  //   - THINKING: skip stage 1, single chain-of-thought call.
+  enum TwoStageMode {
+    TWO_STAGE_MODE_UNSPECIFIED = 0;
+    TWO_STAGE_MODE_OFF = 1;
+    TWO_STAGE_MODE_FAST = 2;
+    TWO_STAGE_MODE_BOTH = 3;
+    TWO_STAGE_MODE_THINKING = 4;
+  }
+  TwoStageMode two_stage = 5 [(config.v1.opts) = {default: "TWO_STAGE_MODE_BOTH"}];
+
+  // Output token cap for the authoritative classifier call (JSON mode, or stage 2 in the two-stage modes).
+  int32 max_tokens = 6 [
+    (config.v1.opts) = {default: "8192"},
+    (buf.validate.field).int32.gte = 1
+  ];
+
+  // Stage-1 max_tokens budget for TWO_STAGE_MODE_BOTH.
+  int32 stage1_max_tokens_both = 7 [
+    (config.v1.opts) = {default: "64"},
+    (buf.validate.field).int32.gte = 1
+  ];
+
+  // Stage-1 max_tokens budget for TWO_STAGE_MODE_FAST.
+  int32 stage1_max_tokens_fast = 8 [
     (config.v1.opts) = {default: "256"},
     (buf.validate.field).int32.gte = 1
   ];

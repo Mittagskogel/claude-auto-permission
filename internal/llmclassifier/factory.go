@@ -10,6 +10,7 @@ import (
 	configpb "claude-auto-permission/internal/gen/config/v1"
 	"claude-auto-permission/internal/llmclassifier/providers"
 	"claude-auto-permission/internal/llmclassifier/providers/bedrock"
+	"claude-auto-permission/internal/llmclassifier/providers/openai"
 )
 
 // ProviderFromConfig dispatches `cfg` to the matching provider's `FromProto`. It's the default value for
@@ -28,6 +29,12 @@ func ProviderFromConfig(ctx context.Context, cfg *configpb.LlmClassifierConfig) 
 	switch {
 	case cfg.GetBedrock() != nil:
 		p, err := bedrock.FromProto(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		return p, nil
+	case cfg.GetOpenai() != nil:
+		p, err := openai.FromProto(ctx, cfg)
 		if err != nil {
 			return nil, err
 		}
